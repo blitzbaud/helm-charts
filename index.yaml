@@ -1,0 +1,25 @@
+apiVersion: v1
+entries:
+  owui-stack:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-05-17T06:46:41.558543843-04:00"
+    description: A Helm chart for deploying the Open WebUI stack with MCP tools
+    digest: 46a2a07a92725699f52204fd0ae736e16e8b36a58f1da161b560cdcaaa72cb25
+    home: https://github.com/open-webui/open-webui
+    keywords:
+    - openwebui
+    - llm
+    - ai
+    - ollama
+    - litellm
+    - mcpo
+    - monitoring
+    maintainers:
+    - name: Trenton White
+    name: owui-stack
+    type: application
+    urls:
+    - https://blitzbaud.github.io/helm-charts/owui-stack-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-05-17T06:46:41.552655663-04:00"

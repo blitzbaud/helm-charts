@@ -1,0 +1,87 @@
+{{- if .Values.alertmanager.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "alertmanager" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+data:
+  alertmanager.yml: |-
+    {{- .Values.alertmanager.config.content | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "alertmanager" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.alertmanager.service.type }}
+  ports:
+    - port: {{ .Values.alertmanager.service.port }}
+      targetPort: {{ .Values.alertmanager.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "alertmanager" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "alertmanager" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "alertmanager" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "alertmanager" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: alertmanager
+          image: "{{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - '--config.file=/etc/alertmanager/alertmanager.yml'
+            - '--log.level=debug'
+          ports:
+            - name: http
+              containerPort: {{ .Values.alertmanager.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: alertmanager-config
+              mountPath: /etc/alertmanager
+          resources:
+            {{- toYaml .Values.alertmanager.resources | nindent 12 }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: alertmanager-config
+          configMap:
+            name: alertmanager-config
+{{- end }}

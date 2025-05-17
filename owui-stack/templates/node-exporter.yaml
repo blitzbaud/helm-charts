@@ -1,0 +1,117 @@
+{{- if .Values.nodeExporter.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "node-exporter" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.nodeExporter.service.type }}
+  ports:
+    - port: {{ .Values.nodeExporter.service.port }}
+      targetPort: {{ .Values.nodeExporter.service.port }}
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- $data := dict "root" . "component" "node-exporter" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "node-exporter" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "node-exporter" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "node-exporter" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: node-exporter
+      automountServiceAccountToken: true
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: "{{ .Values.nodeExporter.image.repository }}:{{ .Values.nodeExporter.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - '--path.procfs=/host/proc'
+            - '--path.sysfs=/host/sys'
+            - '--path.rootfs=/rootfs'
+            - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+            - '--log.level=debug'
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.nodeExporter.service.port }}
+              protocol: TCP
+          volumeMounts:
+            {{- if .Values.nodeExporter.hostPaths.enabled }}
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+            - name: run-secrets
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+            {{- end }}
+          resources:
+            {{- toYaml .Values.nodeExporter.resources | nindent 12 }}
+          securityContext:
+            privileged: true
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+        {{- with .Values.global.tolerations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        {{- if .Values.nodeExporter.hostPaths.enabled }}
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: run-secrets
+          emptyDir: {}
+        {{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-exporter
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "node-exporter" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+{{- end }}

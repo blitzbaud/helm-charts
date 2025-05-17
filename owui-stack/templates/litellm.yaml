@@ -1,0 +1,103 @@
+{{- if .Values.litellm.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "litellm" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+data:
+  config.yaml: |-
+    {{- .Values.litellm.config.content | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "litellm" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.litellm.service.type }}
+  ports:
+    - port: {{ .Values.litellm.service.port }}
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "litellm" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "litellm" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "litellm" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "litellm" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: litellm
+          image: "{{ .Values.litellm.image.repository }}:{{ .Values.litellm.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "--config"
+            - "/app/config/config.yaml"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          volumeMounts:
+            - name: litellm-config
+              mountPath: /app/config
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: OPENAI_API_KEY
+            - name: LITELLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: LITELLM_API_KEY
+          resources:
+            {{- toYaml .Values.litellm.resources | nindent 12 }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: litellm-config
+          configMap:
+            name: litellm-config
+{{- end }}

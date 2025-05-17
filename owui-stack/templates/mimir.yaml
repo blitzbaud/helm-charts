@@ -1,0 +1,119 @@
+{{- if .Values.mimir.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-config
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mimir" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+data:
+  config.yaml: |-
+    {{- .Values.mimir.config.content | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mimir" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.mimir.service.type }}
+  ports:
+    - port: {{ .Values.mimir.service.port }}
+      targetPort: {{ .Values.mimir.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "mimir" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mimir" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "mimir" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "mimir" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: mimir
+          image: "{{ .Values.mimir.image.repository }}:{{ .Values.mimir.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "-config.file=/etc/mimir/config.yaml"
+          ports:
+            - name: http
+              containerPort: {{ .Values.mimir.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: mimir-config
+              mountPath: /etc/mimir
+            - name: mimir-data
+              mountPath: /data/mimir
+          resources:
+            {{- toYaml .Values.mimir.resources | nindent 12 }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: mimir-config
+          configMap:
+            name: mimir-config
+        - name: mimir-data
+          {{- if .Values.mimir.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: mimir-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- if .Values.mimir.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mimir-data
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mimir" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.mimir.persistence.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.mimir.persistence.size | default "10Gi" }}
+  {{- if .Values.mimir.persistence.storageClass }}
+  {{- if (eq "-" .Values.mimir.persistence.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: "{{ .Values.mimir.persistence.storageClass }}"
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

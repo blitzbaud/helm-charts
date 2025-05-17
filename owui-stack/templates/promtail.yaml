@@ -1,0 +1,86 @@
+{{- if .Values.promtail.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-config
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "promtail" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+data:
+  config.yaml: |-
+    {{- .Values.promtail.config.content | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "promtail" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "promtail" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "promtail" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: promtail
+      containers:
+        - name: promtail
+          image: "{{ .Values.promtail.image.repository }}:{{ .Values.promtail.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "-config.file=/etc/promtail/config.yaml"
+          volumeMounts:
+            - name: promtail-config
+              mountPath: /etc/promtail
+            {{- if .Values.promtail.hostPaths.enabled }}
+            - name: var-log
+              mountPath: /var/log
+            - name: var-lib-docker-containers
+              mountPath: /var/lib/docker/containers
+            {{- end }}
+          resources:
+            {{- toYaml .Values.promtail.resources | nindent 12 }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: promtail-config
+          configMap:
+            name: promtail-config
+        {{- if .Values.promtail.hostPaths.enabled }}
+        - name: var-log
+          hostPath:
+            path: /var/log
+        - name: var-lib-docker-containers
+          hostPath:
+            path: /var/lib/docker/containers
+        {{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promtail
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "promtail" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+{{- end }}

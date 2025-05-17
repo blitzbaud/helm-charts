@@ -1,0 +1,704 @@
+{{- if .Values.mcpo.enabled }}
+{{- $useFlask := .Values.mcpo.useFlaskImplementation | default false }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcpo-config
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mcpo" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+data:
+  {{- if not $useFlask }}
+  mcpo_config.json: |-
+    {
+      "port": {{ .Values.mcpo.service.port }},
+      "logLevel": "{{ .Values.mcpo.debug.level }}",
+      "tools": [
+        {
+          "name": "memory",
+          "displayName": "Memory",
+          "description": "Access to persistent memory",
+          "icon": "brain",
+          "color": "#6B7280",
+          "endpoint": "/memory"
+        },
+        {
+          "name": "filesystem",
+          "displayName": "Filesystem",
+          "description": "Access files and directories",
+          "icon": "folder",
+          "color": "#2563EB",
+          "endpoint": "/filesystem"
+        },
+        {
+          "name": "kubernetes",
+          "displayName": "Kubernetes",
+          "description": "Manage Kubernetes resources",
+          "icon": "kubernetes",
+          "color": "#326CE5",
+          "endpoint": "/kubernetes"
+        },
+        {
+          "name": "prometheus",
+          "displayName": "Prometheus",
+          "description": "Query metrics and alerts",
+          "icon": "chart-bar",
+          "color": "#E6522C",
+          "endpoint": "/prometheus"
+        },
+        {
+          "name": "grafana",
+          "displayName": "Grafana",
+          "description": "Access dashboards and visualizations",
+          "icon": "grafana",
+          "color": "#F46800",
+          "endpoint": "/grafana"
+        },
+        {
+          "name": "github",
+          "displayName": "GitHub",
+          "description": "Interact with GitHub repositories",
+          "icon": "github",
+          "color": "#171515",
+          "endpoint": "/github"
+        },
+        {
+          "name": "gitlab",
+          "displayName": "GitLab",
+          "description": "Interact with GitLab repositories",
+          "icon": "gitlab",
+          "color": "#FC6D26",
+          "endpoint": "/gitlab"
+        },
+        {
+          "name": "azure",
+          "displayName": "Azure",
+          "description": "Manage Azure resources",
+          "icon": "azure",
+          "color": "#0078D4",
+          "endpoint": "/azure"
+        },
+        {
+          "name": "aws-core",
+          "displayName": "AWS Core",
+          "description": "Core AWS services",
+          "icon": "aws",
+          "color": "#FF9900",
+          "endpoint": "/aws-core"
+        }
+      ]
+    }
+  {{- else }}
+  # Flask Python server implementation
+  server.py: |-
+    from flask import Flask, jsonify, request, make_response
+    import json
+    import time
+    import logging
+
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('mcpo-flask')
+
+    # Create Flask app
+    app = Flask(__name__)
+
+    # OpenAPI schema with functions
+    schema = {
+        "openapi": "3.0.0",
+        "info": {
+            "title": "MCPO API",
+            "version": "1.0.0",
+            "description": "Model Context Protocol Orchestrator API"
+        },
+        "paths": {
+            "/memory": {
+                "get": {"summary": "List memories"},
+                "post": {"summary": "Store memory"}
+            },
+            "/filesystem": {
+                "get": {"summary": "List files"},
+                "post": {"summary": "Write file"}
+            },
+            "/prometheus": {
+                "get": {"summary": "Query metrics"}
+            },
+            "/grafana": {
+                "get": {"summary": "List dashboards"}
+            }
+        },
+        "functions": [
+            {
+                "name": "memory.store",
+                "description": "Store information in memory",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string", "description": "Content to store in memory"},
+                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags for categorization"}
+                    },
+                    "required": ["content"]
+                }
+            },
+            {
+                "name": "memory.retrieve",
+                "description": "Retrieve memories",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query for retrieving memories"},
+                        "limit": {"type": "integer", "description": "Maximum number of memories to retrieve"}
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "filesystem.list",
+                "description": "List files and directories",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to list files from"}
+                    }
+                }
+            },
+            {
+                "name": "filesystem.write",
+                "description": "Write content to a file",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to write to"},
+                        "content": {"type": "string", "description": "Content to write"}
+                    },
+                    "required": ["path", "content"]
+                }
+            },
+            {
+                "name": "prometheus.query",
+                "description": "Query Prometheus metrics",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Prometheus query string"},
+                        "start": {"type": "string", "description": "Start time in RFC3339 format"},
+                        "end": {"type": "string", "description": "End time in RFC3339 format"},
+                        "step": {"type": "string", "description": "Query resolution step width"}
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "grafana.dashboards",
+                "description": "List Grafana dashboards",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "folder": {"type": "string", "description": "Folder to list dashboards from"}
+                    }
+                }
+            }
+        ]
+    }
+
+    # Enable CORS for all routes
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Max-Age'] = '86400'  # 24 hours
+        return response
+
+    # Log all requests
+    @app.before_request
+    def log_request():
+        logger.info(f"Request: {request.method} {request.path}")
+        if request.is_json and request.get_json():
+            logger.info(f"Request body keys: {list(request.get_json().keys())}")
+
+    # Handle OPTIONS requests for CORS preflight
+    @app.route('/', methods=['OPTIONS'])
+    @app.route('/<path:path>', methods=['OPTIONS'])
+    def options_handler(path=None):
+        return make_response('', 200)
+
+    # Helper function to serve OpenAPI schema
+    def serve_openapi():
+        return jsonify(schema)
+
+    # OpenAPI schema endpoints
+    @app.route('/openapi.json', methods=['GET'])
+    @app.route('/openai.json', methods=['GET'])
+    @app.route('/schema', methods=['GET'])
+    @app.route('/api/schema', methods=['GET'])
+    def get_openapi():
+        return serve_openapi()
+
+    # Tool-specific OpenAPI endpoints
+    @app.route('/<tool>/openapi.json', methods=['GET'])
+    @app.route('/<tool>/openai.json', methods=['GET'])
+    @app.route('/<tool>/schema', methods=['GET'])
+    @app.route('/api/<tool>/schema', methods=['GET'])
+    def get_tool_openapi(tool):
+        return serve_openapi()
+
+    # Health check endpoint
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        return jsonify({'status': 'ok', 'timestamp': int(time.time())})
+
+    # Readiness check endpoint
+    @app.route('/ready', methods=['GET'])
+    def ready_check():
+        return jsonify({'status': 'ready', 'timestamp': int(time.time())})
+
+    # Debug endpoint to show all routes
+    @app.route('/routes', methods=['GET'])
+    def list_routes():
+        routes = []
+        for rule in app.url_map.iter_rules():
+            routes.append({
+                'path': str(rule),
+                'methods': list(rule.methods)
+            })
+        return jsonify(routes)
+
+    # Memory endpoints
+    @app.route('/memory', methods=['GET'])
+    def list_memories():
+        return jsonify({'memories': [], 'status': 'success'})
+
+    @app.route('/memory', methods=['POST'])
+    def store_memory():
+        data = request.get_json() or {}
+        content = data.get('content', '')
+        logger.info(f"Memory store request with content length: {len(content)}")
+        return jsonify({
+            'success': True, 
+            'id': f"memory-{int(time.time())}", 
+            'content': content
+        })
+
+    # Filesystem endpoints
+    @app.route('/filesystem', methods=['GET'])
+    def list_files():
+        return jsonify({
+            'files': [],
+            'directories': [],
+            'path': request.args.get('path', '/')
+        })
+
+    @app.route('/filesystem', methods=['POST'])
+    def write_file():
+        data = request.get_json() or {}
+        path = data.get('path', '/example/path')
+        content = data.get('content', '')
+        logger.info(f"Filesystem write request to path: {path}")
+        return jsonify({
+            'success': True,
+            'path': path,
+            'size': len(content)
+        })
+
+    # Prometheus endpoint
+    @app.route('/prometheus', methods=['GET'])
+    def query_prometheus():
+        return jsonify({
+            'metrics': [],
+            'query': request.args.get('query', ''),
+            'status': 'success'
+        })
+
+    # Grafana endpoint
+    @app.route('/grafana', methods=['GET'])
+    def list_dashboards():
+        return jsonify({
+            'dashboards': [],
+            'folder': request.args.get('folder', 'General'),
+            'status': 'success'
+        })
+
+    # Generic function handler
+    @app.route('/<tool>/<function>', methods=['POST'])
+    def function_handler(tool, function):
+        logger.info(f"Function call: {tool}.{function}")
+        data = request.get_json() or {}
+        
+        return jsonify({
+            'success': True,
+            'tool': tool,
+            'function': function,
+            'timestamp': int(time.time()),
+            'request': data,
+            'response': {'message': f"Mock response for {tool}.{function}"}
+        })
+
+    # 404 handler
+    @app.errorhandler(404)
+    def not_found(e):
+        return jsonify({'error': 'Not found', 'path': request.path}), 404
+
+    # 500 handler
+    @app.errorhandler(500)
+    def server_error(e):
+        logger.error(f"Server error: {str(e)}")
+        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
+
+    if __name__ == '__main__':
+        logger.info("Starting MCPO Flask server on 0.0.0.0:3000")
+        app.run(host='0.0.0.0', port=3000)
+  requirements.txt: |-
+    flask==2.2.3
+    gunicorn==20.1.0
+  entrypoint.sh: |-
+    #!/bin/sh
+    echo "Installing Python dependencies..."
+    pip install -r /app/requirements.txt
+    echo "Starting MCPO Flask server..."
+    gunicorn --bind 0.0.0.0:3000 --workers 2 --log-level info "server:app"
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcpo
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mcpo" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.mcpo.service.type }}
+  ports:
+    - port: {{ .Values.mcpo.service.port }}
+      targetPort: {{ .Values.mcpo.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "mcpo" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcpo
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mcpo" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "mcpo" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "mcpo" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      containers:
+        {{- if not $useFlask }}
+        - name: mcpo
+          image: "{{ .Values.mcpo.image.repository }}:{{ .Values.mcpo.image.tag }}"
+          imagePullPolicy: {{ .Values.mcpo.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.mcpo.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: mcpo-config
+              mountPath: /mcp/mcpo_config.json
+              subPath: mcpo_config.json
+            - name: mcpo-filesystem-data
+              mountPath: /app/files
+            - name: mcpo-memory-data
+              mountPath: /app
+            # Mount Kubernetes config if needed
+            - name: kube-config
+              mountPath: /mcp/.kube/config
+              subPath: config
+              readOnly: true
+          env:
+            # Debug mode for initial testing
+            - name: MOCK_MODE
+              value: {{ .Values.mcpo.mockMode | quote }}
+              
+            # Prometheus Configuration
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:{{ .Values.prometheus.service.port }}"
+            - name: PROMETHEUS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: PROMETHEUS_USERNAME
+                  optional: true
+            - name: PROMETHEUS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: PROMETHEUS_PASSWORD
+                  optional: true
+              
+            # Grafana Configuration
+            - name: GRAFANA_URL
+              value: "http://grafana:{{ .Values.grafana.service.port }}"
+            - name: GRAFANA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: GRAFANA_API_KEY
+              
+            # AWS Configuration
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: AWS_REGION
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: AWS_ACCESS_KEY_ID
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: true
+              
+            # GitHub/GitLab Configuration
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: GITHUB_TOKEN
+                  optional: true
+            - name: GITLAB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: GITLAB_TOKEN
+                  optional: true
+            - name: GITLAB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: GITLAB_URL
+              
+            # Azure Configuration
+            - name: AZURE_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: AZURE_TENANT_ID
+                  optional: true
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: AZURE_CLIENT_ID
+                  optional: true
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: AZURE_CLIENT_SECRET
+                  optional: true
+              
+            # Lambda Configuration
+            - name: FUNCTION_PREFIX
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: FUNCTION_PREFIX
+                  optional: true
+            - name: FUNCTION_LIST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: FUNCTION_LIST
+                  optional: true
+            - name: FUNCTION_TAG_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: FUNCTION_TAG_KEY
+                  optional: true
+            - name: FUNCTION_TAG_VALUE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: FUNCTION_TAG_VALUE
+                  optional: true
+              
+            # Memcached Configuration
+            - name: MEMCACHED_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: MEMCACHED_HOST
+            - name: MEMCACHED_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: MEMCACHED_PORT
+              
+            # Debug/verbose logging
+            - name: DEBUG
+              value: "mcpo:*,mcp:*,*"
+            - name: NODE_ENV
+              value: {{ .Values.mcpo.debug.nodeEnv | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.mcpo.debug.level | quote }}
+        {{- else }}
+        # Flask Python implementation
+        - name: mcpo
+          image: python:3.9-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            mkdir -p /app
+            cp /mcp/server.py /app/
+            cp /mcp/requirements.txt /app/
+            cp /mcp/entrypoint.sh /app/
+            chmod +x /app/entrypoint.sh
+            cd /app
+            sh /app/entrypoint.sh
+          ports:
+            - name: http
+              containerPort: {{ .Values.mcpo.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: mcpo-config
+              mountPath: /mcp
+            - name: mcpo-filesystem-data
+              mountPath: /app/files
+            - name: mcpo-memory-data
+              mountPath: /app/memory
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi" 
+              cpu: "300m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.mcpo.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.mcpo.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+        {{- end }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: mcpo-config
+          configMap:
+            name: mcpo-config
+        - name: mcpo-filesystem-data
+          {{- if .Values.mcpo.persistence.filesystem.enabled }}
+          persistentVolumeClaim:
+            claimName: mcpo-filesystem-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: mcpo-memory-data
+          {{- if .Values.mcpo.persistence.memory.enabled }}
+          persistentVolumeClaim:
+            claimName: mcpo-memory-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if not $useFlask }}
+        - name: kube-config
+          secret:
+            secretName: kube-config
+            optional: true
+        {{- end }}
+---
+# Create an empty kube-config secret if it doesn't exist
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kube-config
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mcpo" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+type: Opaque
+data:
+  config: ""
+{{- if .Values.mcpo.persistence.filesystem.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mcpo-filesystem-data
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mcpo" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.mcpo.persistence.filesystem.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.mcpo.persistence.filesystem.size | default "10Gi" }}
+  {{- if .Values.mcpo.persistence.filesystem.storageClass }}
+  {{- if (eq "-" .Values.mcpo.persistence.filesystem.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: "{{ .Values.mcpo.persistence.filesystem.storageClass }}"
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.mcpo.persistence.memory.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mcpo-memory-data
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "mcpo" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.mcpo.persistence.memory.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.mcpo.persistence.memory.size | default "5Gi" }}
+  {{- if .Values.mcpo.persistence.memory.storageClass }}
+  {{- if (eq "-" .Values.mcpo.persistence.memory.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: "{{ .Values.mcpo.persistence.memory.storageClass }}"
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

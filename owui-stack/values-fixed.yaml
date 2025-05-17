@@ -1,0 +1,142 @@
+# OpenWebUI Stack updated values for K3s deployment
+# This file contains our fixed configurations
+
+# Global configuration
+global:
+  # Default namespace
+  namespace: openwebui
+
+# Ollama configuration
+ollama:
+  # Enable GPU support
+  gpu:
+    enabled: true
+
+# LiteLLM configuration with our fixes
+litellm:
+  config:
+    content: |
+      model_list:
+        # Ollama models with explicit provider mapping
+        - model_name: gpt-3.5-turbo
+          litellm_params:
+            model: ollama/llama2
+            api_base: http://ollama:11434
+          model_info:
+            description: "Local Llama2 model running on Ollama"
+      
+        # Additional Ollama models with explicit provider mappings
+        - model_name: llama3
+          litellm_params:
+            model: ollama/llama3
+            api_base: http://ollama:11434
+          model_info:
+            description: "Local Llama3 model running on Ollama"
+      
+        - model_name: mistral
+          litellm_params:
+            model: ollama/mistral
+            api_base: http://ollama:11434
+          model_info:
+            description: "Local Mistral model running on Ollama"
+      
+        # Default model with explicit provider mapping
+        - model_name: default
+          litellm_params:
+            model: ollama/default
+            api_base: http://ollama:11434
+          model_info:
+            description: "Default Ollama model"
+      
+      server:
+        api_key: sk-litellm-proxy
+        host: 0.0.0.0
+        port: 8000
+        allow_cors: true
+        # Health check endpoint
+        health_check_path: /health
+      
+      litellm_settings:
+        drop_params: true
+        num_workers: 4
+        stream_chunk_size: 20
+        # Enable function calling for all models
+        function_calling_enabled: true
+        # Skip models with missing API keys or unavailable services
+        drop_unavailable_models: true
+        # Enable fallbacks to try alternate models if one fails
+        fallbacks: [
+          {
+            "gpt-3.5-turbo": ["llama3", "default"]
+          },
+          {
+            "llama3": ["mistral", "default"]
+          },
+          {
+            "mistral": ["default"]
+          }
+        ]
+        # Provider map to ensure correct routing
+        provider_map:
+          ollama/llama3: ollama
+          ollama/llama2: ollama
+          ollama/mistral: ollama
+          ollama/phi: ollama
+          ollama/default: ollama
+          openai/gpt-3.5-turbo: openai
+          openai/gpt-4: openai
+          anthropic/claude-3-5-sonnet: anthropic
+          anthropic/claude-3-opus: anthropic
+          anthropic/claude-3-haiku: anthropic
+        # Retry configurations
+        max_retries: 3
+        retry_after: 1
+        # Set a longer timeout
+        request_timeout: 180
+
+# Loki configuration with our minimal working config
+loki:
+  config:
+    content: |
+      # Super minimal Loki configuration - Fixed for Prometheus integration
+      auth_enabled: false
+      
+      server:
+        http_listen_port: 3100
+        http_listen_address: 0.0.0.0
+        log_level: debug
+      
+      schema_config:
+        configs:
+          - from: 2020-10-24
+            store: inmemory
+            object_store: filesystem
+            schema: v11
+            index:
+              prefix: index_
+              period: 24h
+      
+      storage_config:
+        filesystem:
+          directory: /data/loki/chunks
+      
+      limits_config:
+        enforce_metric_name: false
+        reject_old_samples: false
+        max_cache_freshness_per_query: 10m
+      
+      ingester:
+        lifecycler:
+          address: 0.0.0.0
+          ring:
+            kvstore:
+              store: inmemory
+            replication_factor: 1
+          final_sleep: 0s
+        chunk_idle_period: 5m
+        chunk_retain_period: 30s
+
+# MCPO updated to use our Flask implementation
+mcpo:
+  # Special setting to use our Flask implementation
+  useFlaskImplementation: true

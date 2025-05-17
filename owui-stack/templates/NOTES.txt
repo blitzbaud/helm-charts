@@ -1,0 +1,62 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }} in namespace {{ .Values.global.namespace | default "openwebui" }}.
+
+To check the status of the deployment, run:
+  kubectl get pods -n {{ .Values.global.namespace | default "openwebui" }}
+
+{{- if .Values.openwebui.enabled }}
+To access OpenWebUI:
+{{- if .Values.openwebui.service.loadBalancer.enabled }}
+  The service is exposed via LoadBalancer. You can access it at:
+  
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status by running 'kubectl get --namespace {{ .Values.global.namespace | default "openwebui" }} svc -w {{ .Release.Name }}-openwebui-lb'
+  
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Values.global.namespace | default "openwebui" }} {{ .Release.Name }}-openwebui-lb --template "{{ "{{ range (index .status.loadBalancer.ingress 0) }}{{ . }}{{ end }}" }}")
+  echo http://$SERVICE_IP:{{ .Values.openwebui.service.loadBalancer.port }}
+{{- else if eq .Values.openwebui.service.type "NodePort" }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Values.global.namespace | default "openwebui" }} -o jsonpath="{.spec.ports[0].nodePort}" services openwebui)
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Values.global.namespace | default "openwebui" }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if .Values.openwebui.service.ingress.enabled }}
+  The OpenWebUI is available at:
+{{- range .Values.openwebui.service.ingress.hosts }}
+  http{{ if $.Values.openwebui.service.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+  Use port-forwarding to access the UI:
+  kubectl port-forward -n {{ .Values.global.namespace | default "openwebui" }} svc/openwebui {{ .Values.openwebui.service.port }}:{{ .Values.openwebui.service.port }}
+  
+  Then open your browser at http://localhost:{{ .Values.openwebui.service.port }}
+{{- end }}
+
+  Default admin credentials:
+  - Username: {{ .Values.secrets.openwebuiAdminUsername }}
+  - Password: {{ .Values.secrets.openwebuiAdminPassword }}
+  
+  NOTE: It's recommended to change these default credentials after first login.
+{{- end }}
+
+{{- if .Values.prometheus.enabled }}
+To access Prometheus:
+  kubectl port-forward -n {{ .Values.global.namespace | default "openwebui" }} svc/prometheus {{ .Values.prometheus.service.port }}:{{ .Values.prometheus.service.port }}
+  
+  Then open your browser at http://localhost:{{ .Values.prometheus.service.port }}
+{{- end }}
+
+{{- if .Values.grafana.enabled }}
+To access Grafana:
+  kubectl port-forward -n {{ .Values.global.namespace | default "openwebui" }} svc/grafana {{ .Values.grafana.service.port }}:{{ .Values.grafana.service.port }}
+  
+  Then open your browser at http://localhost:{{ .Values.grafana.service.port }}
+  
+  Default admin credentials:
+  - Username: {{ .Values.secrets.grafanaAdminUser }}
+  - Password: {{ .Values.secrets.grafanaAdminPassword }}
+{{- end }}
+
+For more information about the stack, visit:
+- OpenWebUI: https://github.com/open-webui/open-webui
+- Ollama: https://ollama.ai/
+- LiteLLM: https://github.com/BerriAI/litellm

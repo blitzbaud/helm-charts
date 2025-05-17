@@ -1,0 +1,17 @@
+apiVersion: v2
+name: owui-stack
+description: A Helm chart for deploying the Open WebUI stack with MCP tools
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - openwebui
+  - llm
+  - ai
+  - ollama
+  - litellm
+  - mcpo
+  - monitoring
+home: https://github.com/open-webui/open-webui
+maintainers:
+  - name: Trenton White

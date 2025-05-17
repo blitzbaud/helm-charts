@@ -1,0 +1,129 @@
+{{- if .Values.cadvisor.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cadvisor
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "cadvisor" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.cadvisor.service.type }}
+  ports:
+    - port: {{ .Values.cadvisor.service.port }}
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "cadvisor" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cadvisor
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "cadvisor" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "cadvisor" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "cadvisor" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: cadvisor
+      automountServiceAccountToken: true
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: cadvisor
+          image: "{{ .Values.cadvisor.image.repository }}:{{ .Values.cadvisor.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            {{- if .Values.cadvisor.hostPaths.enabled }}
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+            - name: var-run
+              mountPath: /var/run
+              readOnly: false
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: docker
+              mountPath: /var/lib/docker
+              readOnly: true
+            - name: disk
+              mountPath: /dev/disk
+              readOnly: true
+            - name: run-secrets
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+            {{- end }}
+          resources:
+            {{- toYaml .Values.cadvisor.resources | nindent 12 }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+              - SYS_ADMIN
+              - NET_ADMIN
+              - NET_RAW
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+        {{- with .Values.global.tolerations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        {{- if .Values.cadvisor.hostPaths.enabled }}
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: var-run
+          hostPath:
+            path: /var/run
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: docker
+          hostPath:
+            path: /var/lib/docker
+            type: DirectoryOrCreate
+        - name: disk
+          hostPath:
+            path: /dev/disk
+        - name: run-secrets
+          emptyDir: {}
+        {{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cadvisor
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "cadvisor" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+{{- end }}

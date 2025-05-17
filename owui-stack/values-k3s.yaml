@@ -1,0 +1,89 @@
+# K3s specific overrides for OpenWebUI Stack
+
+# Global settings for K3s
+global:
+  # K3s typically doesn't need special image pull secrets
+  imagePullSecrets: []
+  # Tolerations to allow pods to run on master/control-plane nodes in small K3s clusters
+  tolerations:
+  - key: "node-role.kubernetes.io/master"
+    operator: "Exists"
+    effect: "NoSchedule"
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+# K3s specific settings for cadvisor
+cadvisor:
+  # In K3s, container runtime path might be different
+  hostPaths:
+    enabled: true
+    # If using containerd in K3s instead of Docker, adjust as needed
+    containerRuntimePath: /run/k3s/containerd
+  securityContext:
+    privileged: true
+    capabilities:
+      add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - NET_RAW
+  # Add additional volume for service account token
+  additionalVolumes:
+    - name: run-secrets
+      emptyDir: {}
+  additionalVolumeMounts:
+    - name: run-secrets
+      mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      readOnly: false
+  # Set var-run mount to read-write
+  varRunReadOnly: false
+
+# Adjust resource requirements for small K3s clusters
+ollama:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# K3s specific node-exporter settings
+nodeExporter:
+  # Extra args for K3s compatibility
+  args:
+    - '--no-collector.hwmon'  # Often causes issues in K3s/containerd
+  securityContext:
+    privileged: true  # Running as privileged avoids read-only fs issues
+  # Add additional volume for service account token
+  additionalVolumes:
+    - name: run-secrets
+      emptyDir: {}
+  additionalVolumeMounts:
+    - name: run-secrets
+      mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      readOnly: false
+
+prometheus:
+  # Smaller resource footprint for K3s
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 1Gi
+
+# Other components resource adjustments for K3s
+grafana:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+
+# Storage class configured for K3s
+# Change this to match your K3s storage provisioner (e.g., local-path)
+storageClass: "local-path"

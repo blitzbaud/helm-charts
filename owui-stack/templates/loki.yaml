@@ -1,0 +1,119 @@
+{{- if .Values.loki.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "loki" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+data:
+  local-config.yaml: |-
+    {{- .Values.loki.config.content | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "loki" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.loki.service.type }}
+  ports:
+    - port: {{ .Values.loki.service.port }}
+      targetPort: {{ .Values.loki.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "loki" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "loki" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "loki" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "loki" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: loki
+          image: "{{ .Values.loki.image.repository }}:{{ .Values.loki.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "-config.file=/etc/loki/local-config.yaml"
+          ports:
+            - name: http
+              containerPort: {{ .Values.loki.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: loki-config
+              mountPath: /etc/loki
+            - name: loki-data
+              mountPath: /data/loki
+          resources:
+            {{- toYaml .Values.loki.resources | nindent 12 }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: loki-config
+          configMap:
+            name: loki-config
+        - name: loki-data
+          {{- if .Values.loki.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: loki-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- if .Values.loki.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "loki" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.loki.persistence.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.loki.persistence.size | default "10Gi" }}
+  {{- if .Values.loki.persistence.storageClass }}
+  {{- if (eq "-" .Values.loki.persistence.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: "{{ .Values.loki.persistence.storageClass }}"
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,211 @@
+{{- if .Values.openwebui.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openwebui
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "openwebui" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: {{ .Values.openwebui.service.type }}
+  ports:
+    - port: {{ .Values.openwebui.service.port }}
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "openwebui" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+---
+{{- if .Values.openwebui.service.loadBalancer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: openwebui-lb
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "openwebui" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  type: LoadBalancer
+  ports:
+    - port: {{ .Values.openwebui.service.loadBalancer.port }}
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    {{- $data := dict "root" . "component" "openwebui" }}
+    {{- include "owui-stack.componentSelectorLabels" $data | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.openwebui.service.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openwebui
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "openwebui" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+  {{- with .Values.openwebui.service.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  rules:
+    {{- range .Values.openwebui.service.ingress.hosts }}
+    - host: {{ .host }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: openwebui
+                port:
+                  number: {{ $.Values.openwebui.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openwebui
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "openwebui" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $data := dict "root" . "component" "openwebui" }}
+      {{- include "owui-stack.componentSelectorLabels" $data | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $data := dict "root" . "component" "openwebui" }}
+        {{- include "owui-stack.componentSelectorLabels" $data | nindent 8 }}
+    spec:
+      {{- include "owui-stack.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: openwebui
+          image: "{{ .Values.openwebui.image.repository }}:{{ .Values.openwebui.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: openwebui-data
+              mountPath: /app/backend/data
+          env:
+            # API Configuration
+            - name: OLLAMA_API_BASE_URL
+              value: "http://ollama:{{ .Values.ollama.service.port }}"
+            - name: OLLAMA_BASE_URL
+              value: "http://ollama:{{ .Values.ollama.service.port }}"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: LITELLM_API_KEY
+            - name: OPENAI_API_BASE_URL
+              value: "http://litellm:{{ .Values.litellm.service.port }}/v1"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: OPENAI_API_KEY_REAL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: OPENAI_API_KEY
+                  
+            # MCP Tool Endpoints
+            - name: MCP_ENDPOINTS
+              value: "memory|http://mcpo:{{ .Values.mcpo.service.port }}/memory|http://mcpo:{{ .Values.mcpo.service.port }}/filesystem|http://mcpo:{{ .Values.mcpo.service.port }}/kubernetes|http://mcpo:{{ .Values.mcpo.service.port }}/prometheus|http://mcpo:{{ .Values.mcpo.service.port }}/grafana|http://mcpo:{{ .Values.mcpo.service.port }}/github|http://mcpo:{{ .Values.mcpo.service.port }}/gitlab|http://mcpo:{{ .Values.mcpo.service.port }}/azure|http://mcpo:{{ .Values.mcpo.service.port }}/aws-core|http://mcpo:{{ .Values.mcpo.service.port }}/aws-nova-canvas|http://mcpo:{{ .Values.mcpo.service.port }}/aws-bedrock-kb|http://mcpo:{{ .Values.mcpo.service.port }}/aws-cost-analysis|http://mcpo:{{ .Values.mcpo.service.port }}/aws-cdk|http://mcpo:{{ .Values.mcpo.service.port }}/aws-documentation|http://mcpo:{{ .Values.mcpo.service.port }}/aws-lambda|http://mcpo:{{ .Values.mcpo.service.port }}/aws-terraform|http://mcpo:{{ .Values.mcpo.service.port }}/aws-location|http://mcpo:{{ .Values.mcpo.service.port }}/aws-memcached|http://mcpo:{{ .Values.mcpo.service.port }}/aws-git-repo-research|http://mcpo:{{ .Values.mcpo.service.port }}/aws-cloudformation"
+            - name: MCP_DEFAULT_TOOLS
+              value: {{ .Values.openwebui.mcp.defaultTools | quote }}
+              
+            # Admin User Configuration
+            - name: OPENWEBUI_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: OPENWEBUI_ADMIN_USERNAME
+            - name: OPENWEBUI_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: OPENWEBUI_ADMIN_PASSWORD
+            - name: OPENWEBUI_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "owui-stack.fullname" . }}-secrets
+                  key: OPENWEBUI_ADMIN_EMAIL
+                  
+            # Authentication (optional)
+            - name: WEBUI_AUTH_DISABLED
+              value: {{ .Values.openwebui.auth.disabled | quote }}
+              
+            # Enable Global MCP tools
+            - name: ENABLE_GLOBAL_FUNCTIONS
+              value: {{ .Values.openwebui.mcp.enableGlobalFunctions | quote }}
+              
+            # Enable verbose logging
+            - name: LOG_LEVEL
+              value: {{ .Values.openwebui.logging.level | quote }}
+              
+          resources:
+            {{- toYaml .Values.openwebui.resources | nindent 12 }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: openwebui-data
+          {{- if .Values.openwebui.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: openwebui-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- if .Values.openwebui.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openwebui-data
+  namespace: {{ .Values.global.namespace | default "openwebui" }}
+  labels:
+    {{- $data := dict "root" . "component" "openwebui" }}
+    {{- include "owui-stack.componentLabels" $data | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.openwebui.persistence.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.openwebui.persistence.size | default "5Gi" }}
+  {{- if .Values.openwebui.persistence.storageClass }}
+  {{- if (eq "-" .Values.openwebui.persistence.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: "{{ .Values.openwebui.persistence.storageClass }}"
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

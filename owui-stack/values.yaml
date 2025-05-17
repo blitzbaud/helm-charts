@@ -1,0 +1,606 @@
+# Default values for owui-stack
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  # Storage classes for persistent volumes
+  storageClass: ""
+  # Image pull policy for all services
+  imagePullPolicy: IfNotPresent
+  # Image pull secrets for all services
+  imagePullSecrets: []
+  # Node selector for all services
+  nodeSelector: {}
+  # Tolerations for all services
+  tolerations: []
+  # Affinity for all services
+  affinity: {}
+  # Default namespace
+  namespace: openwebui
+
+# API Keys and credentials
+secrets:
+  # LLM API keys
+  anthropicApiKey: ""
+  openaiApiKey: ""
+  litellmApiKey: "sk-litellm-proxy"
+  
+  # AWS credentials
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""
+  awsRegion: "us-east-1"
+  
+  # GitHub/GitLab credentials
+  githubToken: ""
+  gitlabToken: ""
+  gitlabUrl: "https://gitlab.com"
+  
+  # Azure credentials
+  azureTenantId: ""
+  azureClientId: ""
+  azureClientSecret: ""
+  
+  # Lambda configuration
+  functionPrefix: ""
+  functionList: ""
+  functionTagKey: ""
+  functionTagValue: ""
+  
+  # Grafana credentials
+  grafanaApiKey: "admin"
+  grafanaAdminUser: "admin"
+  grafanaAdminPassword: "admin"
+  
+  # Prometheus credentials
+  prometheusUsername: ""
+  prometheusPassword: ""
+  
+  # Memcached configuration
+  memcachedHost: "127.0.0.1"
+  memcachedPort: "11211"
+  
+  # OpenWebUI admin credentials
+  openwebuiAdminUsername: "admin"
+  openwebuiAdminPassword: "admin"
+  openwebuiAdminEmail: "admin@example.com"
+
+# Ollama configuration
+ollama:
+  enabled: true
+  image:
+    repository: ollama/ollama
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 11434
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  persistence:
+    enabled: true
+    size: 20Gi
+    # storageClass will use global.storageClass
+    accessMode: ReadWriteOnce
+  # GPU configuration
+  gpu:
+    enabled: true
+    driver: nvidia
+    count: all
+
+# LiteLLM configuration
+litellm:
+  enabled: true
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: main-latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  # Configuration for litellm config files
+  config:
+    enabled: true
+    content: |
+      model_list:
+        - model_name: ollama/llama3
+          litellm_params:
+            model: ollama/llama3
+            api_base: http://ollama:11434
+        - model_name: claude-3-sonnet-20240229
+          litellm_params:
+            model: claude-3-sonnet-20240229
+      
+      router_settings:
+        model_group_alias:
+          gpt-4: ollama/llama3
+          claude-sonnet: claude-3-sonnet-20240229
+        
+      environment_variables:
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      general_settings:
+        default_api_key: $LITELLM_API_KEY
+
+# OpenWebUI configuration
+openwebui:
+  enabled: true
+  image:
+    repository: ghcr.io/open-webui/open-webui
+    tag: cuda
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 8080
+    # For LoadBalancer configurations
+    loadBalancer:
+      enabled: false
+      port: 80
+    # For Ingress configurations
+    ingress:
+      enabled: false
+      annotations: {}
+      hosts:
+        - host: openwebui.local
+          paths:
+            - path: /
+              pathType: Prefix
+  resources:
+    requests:
+      cpu: 200m
+      memory: 500Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 5Gi
+    # storageClass will use global.storageClass
+    accessMode: ReadWriteOnce
+  # Authentication configuration
+  auth:
+    disabled: true
+  # Enable verbose logging
+  logging:
+    level: "debug"
+  # MCP tools configuration
+  mcp:
+    enableGlobalFunctions: true
+    defaultTools: "memory,filesystem,prometheus,grafana"
+
+# MCPO (MCP Orchestrator) configuration
+mcpo:
+  enabled: true
+  image:
+    repository: mcpo
+    tag: latest
+    # Use Always pullPolicy for local images
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 500Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  persistence:
+    filesystem:
+      enabled: true
+      size: 10Gi
+      # storageClass will use global.storageClass
+      accessMode: ReadWriteOnce
+    memory:
+      enabled: true
+      size: 5Gi
+      # storageClass will use global.storageClass
+      accessMode: ReadWriteOnce
+  # Debug/mock mode for testing
+  mockMode: true
+  # Debug settings
+  debug:
+    enabled: true
+    level: "debug"
+    nodeEnv: "development"
+
+# Prometheus configuration
+prometheus:
+  enabled: true
+  image:
+    repository: prom/prometheus
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 9090
+  resources:
+    requests:
+      cpu: 200m
+      memory: 500Mi
+    limits:
+      cpu: 500m
+      memory: 2Gi
+  persistence:
+    enabled: true
+    size: 10Gi
+    # storageClass will use global.storageClass
+    accessMode: ReadWriteOnce
+  # Configuration content
+  config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+      
+      alerting:
+        alertmanagers:
+          - static_configs:
+              - targets:
+                - alertmanager:9093
+      
+      rule_files:
+        - /etc/prometheus/alert_rules.yml
+      
+      scrape_configs:
+        - job_name: 'prometheus'
+          static_configs:
+            - targets: ['localhost:9090']
+        
+        - job_name: 'node-exporter'
+          static_configs:
+            - targets: ['node-exporter:9100']
+        
+        - job_name: 'cadvisor'
+          static_configs:
+            - targets: ['cadvisor:8080']
+        
+        - job_name: 'openwebui'
+          static_configs:
+            - targets: ['openwebui:8080']
+        
+        - job_name: 'ollama'
+          static_configs:
+            - targets: ['ollama:11434']
+        
+        - job_name: 'mcpo'
+          static_configs:
+            - targets: ['mcpo:3000']
+      
+  alertRules:
+    content: |
+      groups:
+      - name: example
+        rules:
+        - alert: HighCPUUsage
+          expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage detected"
+            description: "CPU usage is above 80% for more than 5 minutes."
+
+# Node Exporter configuration
+nodeExporter:
+  enabled: true
+  image:
+    repository: prom/node-exporter
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 9100
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # Host mount paths
+  hostPaths:
+    enabled: true
+
+# cAdvisor configuration
+cadvisor:
+  enabled: true
+  image:
+    repository: gcr.io/cadvisor/cadvisor
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+  # Host mount paths
+  hostPaths:
+    enabled: true
+
+# Grafana configuration
+grafana:
+  enabled: true
+  image:
+    repository: grafana/grafana
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 5Gi
+    # storageClass will use global.storageClass
+    accessMode: ReadWriteOnce
+  # Grafana dashboard provisioning
+  dashboards:
+    enabled: true
+
+# Alertmanager configuration
+alertmanager:
+  enabled: true
+  image:
+    repository: prom/alertmanager
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 9093
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+  # Alertmanager configuration
+  config:
+    content: |
+      global:
+        resolve_timeout: 5m
+      
+      route:
+        group_by: ['alertname']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 12h
+        receiver: 'email'
+      
+      receivers:
+      - name: 'email'
+        email_configs:
+        - to: 'alerts@example.com'
+          from: 'alerts@example.com'
+          smarthost: 'smtp.example.com:587'
+          auth_username: 'alerts@example.com'
+          auth_identity: 'alerts@example.com'
+          auth_password: 'password'
+
+# Loki configuration
+loki:
+  enabled: true
+  image:
+    repository: grafana/loki
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 3100
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 10Gi
+    # storageClass will use global.storageClass
+    accessMode: ReadWriteOnce
+  # Loki configuration
+  config:
+    content: |
+      auth_enabled: false
+      
+      server:
+        http_listen_port: 3100
+      
+      ingester:
+        lifecycler:
+          address: 127.0.0.1
+          ring:
+            kvstore:
+              store: inmemory
+            replication_factor: 1
+        chunk_idle_period: 5m
+        chunk_retain_period: 30s
+      
+      schema_config:
+        configs:
+          - from: 2020-05-15
+            store: boltdb
+            object_store: filesystem
+            schema: v11
+            index:
+              prefix: index_
+              period: 24h
+      
+      storage_config:
+        boltdb:
+          directory: /data/loki/index
+        filesystem:
+          directory: /data/loki/chunks
+      
+      limits_config:
+        enforce_metric_name: false
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+      
+      chunk_store_config:
+        max_look_back_period: 0s
+      
+      table_manager:
+        retention_deletes_enabled: false
+        retention_period: 0s
+
+# Promtail configuration
+promtail:
+  enabled: true
+  image:
+    repository: grafana/promtail
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+  # Host mount paths
+  hostPaths:
+    enabled: true
+  # Promtail configuration
+  config:
+    content: |
+      server:
+        http_listen_port: 9080
+        grpc_listen_port: 0
+      
+      positions:
+        filename: /tmp/positions.yaml
+      
+      clients:
+        - url: http://loki:3100/loki/api/v1/push
+      
+      scrape_configs:
+        - job_name: system
+          static_configs:
+            - targets:
+                - localhost
+              labels:
+                job: varlogs
+                __path__: /var/log/*log
+      
+        - job_name: containers
+          static_configs:
+            - targets:
+                - localhost
+              labels:
+                job: containerlogs
+                __path__: /var/lib/docker/containers/*/*log
+          pipeline_stages:
+            - json:
+                expressions:
+                  stream: stream
+                  service: service.name
+                  log: log
+                  time: time
+            - labels:
+                stream:
+                service:
+
+# Mimir configuration
+mimir:
+  enabled: true
+  image:
+    repository: grafana/mimir
+    tag: latest
+    # pullPolicy will use global.imagePullPolicy
+  service:
+    type: ClusterIP
+    port: 9009
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 10Gi
+    # storageClass will use global.storageClass
+    accessMode: ReadWriteOnce
+  # Mimir configuration
+  config:
+    content: |
+      multitenancy_enabled: false
+      
+      blocks_storage:
+        backend: filesystem
+        filesystem:
+          dir: /data/mimir/blocks
+        bucket_store:
+          sync_dir: /data/mimir/tsdb-sync
+      
+      compactor:
+        data_dir: /data/mimir/compactor
+        sharding_ring:
+          kvstore:
+            store: inmemory
+      
+      frontend:
+        align_queries_with_step: true
+        cache_results: true
+        log_queries_longer_than: 10s
+      
+      ingester:
+        lifecycler:
+          ring:
+            kvstore:
+              store: inmemory
+            replication_factor: 1
+      
+      limits:
+        max_label_name_length: 1024
+        max_label_value_length: 2048
+        max_label_names_per_series: 30
+      
+      ruler:
+        alertmanager_url: http://alertmanager:9093
+        rule_path: /data/mimir/rules
+        ring:
+          kvstore:
+            store: inmemory
+      
+      server:
+        http_listen_port: 9009
+      
+      store_gateway:
+        sharding_ring:
+          replication_factor: 1
+          kvstore:
+            store: inmemory
+      
+      distributor:
+        ring:
+          kvstore:
+            store: inmemory
